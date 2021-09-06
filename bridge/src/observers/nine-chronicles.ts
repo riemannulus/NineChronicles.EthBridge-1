@@ -56,6 +56,7 @@ export class NCGTransferredEventObserver implements IObserver<{ blockHash: Block
         let recorded = false;
         for (const { blockHash, txId, sender, amount: amountString, memo: recipient, } of events) {
             try {
+                console.log(`[${blockHash}] txId: ${txId} sender: ${sender} amount: ${amountString} recipient: ${recipient}`);
                 const decimals = new Decimal(10).pow(18);
                 const amount = new Decimal(amountString);
                 const minimum = new Decimal(this._limitationPolicy.minimum);
@@ -108,6 +109,17 @@ export class NCGTransferredEventObserver implements IObserver<{ blockHash: Block
                 console.log("fee", fee);
                 console.log("exchangeAmount", exchangeAmount);
 
+                await this._monitorStateStore.store("nineChronicles", { blockHash, txId });
+                recorded = true;
+                await this._exchangeHistoryStore.put({
+                    network: "nineChronicles",
+                    tx_id: txId,
+                    sender,
+                    recipient,
+                    timestamp: new Date().toISOString(),
+                    amount: limitedAmount.toNumber(),
+                });
+
                 // FIXME: Hard-coded.
                 let transactionHash
                 // https://explorer.libplanet.io/9c-main/block/?52573abd5e04d933a84f171745ce39c1d3e17cefe8aab12f62172f7710a3bd01
@@ -122,16 +134,6 @@ export class NCGTransferredEventObserver implements IObserver<{ blockHash: Block
                 }
 
                 console.log("Receipt", transactionHash);
-                await this._monitorStateStore.store("nineChronicles", { blockHash, txId });
-                recorded = true;
-                await this._exchangeHistoryStore.put({
-                    network: "nineChronicles",
-                    tx_id: txId,
-                    sender,
-                    recipient,
-                    timestamp: new Date().toISOString(),
-                    amount: limitedAmount.toNumber(),
-                });
                 await this._slackWebClient.chat.postMessage({
                     channel: "#nine-chronicles-bridge-bot",
                     ...new WrappedEvent(this._explorerUrl, this._etherscanUrl, sender, recipient, exchangeAmount.toString(), txId, transactionHash, fee, refundAmount, refundTxId).render()
